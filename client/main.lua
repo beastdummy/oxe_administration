@@ -358,6 +358,11 @@ function handleTeleportAction(actionId, payload)
             lib.setClipboard(text)
         end
 
+        SendNUIMessage({
+            action = 'coordsCopied',
+            data = text
+        })
+
         notify('Quick Admin', 'Coordenadas copiadas: ' .. text, 'inform')
         print('[oxe_admin] Coords copiadas: ' .. text)
     end

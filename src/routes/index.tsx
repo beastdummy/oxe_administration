@@ -13,6 +13,7 @@ type ViewMode = 'quick' | 'tablet'
 function AdminRoot() {
   const [mode, setMode] = useState<ViewMode>('quick')
   const [visible, setVisible] = useState(() => !isInGame())
+  const [copiedText, setCopiedText] = useState<string | null>(null)
 
   // TAB = alternar vistas (Quick / Tablet)
   useEffect(() => {
@@ -39,11 +40,22 @@ function AdminRoot() {
           setMode(incomingMode)
         }
       }
+
+      if (action === 'coordsCopied' && typeof data === 'string') {
+        setCopiedText(data)
+      }
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [])
+
+  useEffect(() => {
+    if (!copiedText) return
+
+    const timeout = window.setTimeout(() => setCopiedText(null), 2500)
+    return () => window.clearTimeout(timeout)
+  }, [copiedText])
 
   if (!visible) {
     return null
