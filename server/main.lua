@@ -22,6 +22,14 @@ local function debug(msg, ...)
     print(str:format(...))
 end
 
+local function notify(src, type, description, title)
+    TriggerClientEvent('ox_lib:notify', src, {
+        title = title or 'Quick Admin',
+        description = description,
+        type = type
+    })
+end
+
 ---Comprueba si un jugador tiene permiso de admin.
 ---@param src number
 ---@return boolean
@@ -38,6 +46,16 @@ local function isPlayerAdmin(src)
     return false
 end
 
+local function ensureAdmin(src)
+    if isPlayerAdmin(src) then
+        return true
+    end
+
+    debug('El jugador %d intentó usar una acción sin permisos', src)
+    notify(src, 'error', 'No tienes permisos para usar esta acción.')
+    return false
+end
+
 -- =====================================================================
 -- Eventos: abrir UI
 -- =====================================================================
@@ -47,9 +65,7 @@ end
 RegisterNetEvent('oxe_admin:server:requestOpen', function()
     local src = source
 
-    if not isPlayerAdmin(src) then
-        debug('El jugador %d intentó abrir el panel sin permisos', src)
-        -- Aquí podrías notificar con tu sistema de notificaciones del servidor
+    if not ensureAdmin(src) then
         return
     end
 
@@ -72,10 +88,7 @@ end)
 RegisterNetEvent('oxe_admin:server:quickAction', function(data)
     local src = source
 
-    if not isPlayerAdmin(src) then
-        debug('El jugador %d intentó usar QuickAdmin sin permisos', src)
-        return
-    end
+    if not ensureAdmin(src) then return end
 
     if type(data) ~= 'table' then
         debug('QuickAction recibió datos inválidos desde %d', src)
@@ -112,9 +125,9 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
             TriggerClientEvent('oxe_admin:client:clearBlood', src)
 
         elseif variantId == 'self_clear_inventory' then
-            -- Aquí lo normal será llamar a ox_inventory / qbx / lo que uses
-            -- exports.ox_inventory:ClearInventory(src) -- EJEMPLO
-            debug('→ Vaciar inventario propio (pendiente implementar)')
+            if not ensureAdmin(src) then return end
+            exports.ox_inventory:ClearInventory(src)
+            notify(src, 'success', 'Has vaciado tu inventario.')
 
         elseif variantId == 'self_admin_weapon' then
             -- giveWeapon al jugador (usa tu sistema de armas)
@@ -141,23 +154,39 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
             TriggerClientEvent('oxe_admin:client:bringPlayer', src, targetId)
 
         elseif variantId == 'players_open_inventory' then
-            debug('→ Abrir inventario de %d (pendiente implementar)', targetId)
+            if not ensureAdmin(src) then return end
+            local opened = exports.ox_inventory:forceOpenInventory(src, 'player', targetId)
+            if not opened then
+                notify(src, 'error', ('No se pudo abrir el inventario de %d.'):format(targetId))
+            else
+                notify(src, 'success', ('Abriendo inventario de %d.'):format(targetId))
+            end
 
         elseif variantId == 'players_clear_inventory' then
-            debug('→ Vaciar inventario de %d (pendiente implementar)', targetId)
+            if not ensureAdmin(src) then return end
+            exports.ox_inventory:ClearInventory(targetId)
+            notify(src, 'success', ('Inventario de %d limpiado.'):format(targetId))
 
         elseif variantId == 'players_freeze' then
             TriggerClientEvent('oxe_admin:client:toggleFreeze', targetId)
 
         elseif variantId == 'players_jail' then
-            debug('→ Enviar %d a jail (pendiente implementar)', targetId)
+            if not ensureAdmin(src) then return end
+            local duration = tonumber(payload.minutes or 15)
+            local reason = tostring(payload.reason or 'Sanción administrativa')
+            exports.jail:jailPlayer(targetId, duration, reason, src)
+            notify(src, 'success', ('%d encarcelado por %d minutos.'):format(targetId, duration))
 
         elseif variantId == 'players_kick' then
             -- Kick directo desde servidor
             DropPlayer(targetId, 'Expulsado por administración.')
 
         elseif variantId == 'players_ban' then
-            debug('→ Ban rápido de %d (pendiente integrar con tu sistema de bans)', targetId)
+            if not ensureAdmin(src) then return end
+            local duration = tonumber(payload.hours or 0)
+            local reason = tostring(payload.reason or 'Baneado por administración')
+            exports.bansystem:banPlayer(targetId, src, duration, reason)
+            notify(src, 'success', ('%d baneado correctamente.'):format(targetId))
         end
 
     -- =======================
@@ -183,7 +212,24 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
     -- =======================
     elseif groupId == 'vehicles' then
         if variantId == 'veh_spawn' then
-            debug('→ Spawnear vehículo admin (pendiente implementar)')
+            if not ensureAdmin(src) then return end
+            local model = payload.model or 'adder'
+            local hash = joaat(model)
+            if not IsModelInCdimage(hash) then
+                notify(src, 'error', ('Modelo inválido: %s'):format(model))
+                return
+            end
+
+            local ped = GetPlayerPed(src)
+            local coords = GetEntityCoords(ped)
+            local heading = GetEntityHeading(ped)
+
+            lib.requestModel(hash, 5000)
+            local veh = CreateVehicle(hash, coords.x, coords.y, coords.z, heading, true, true)
+            SetVehicleOnGroundProperly(veh)
+            SetVehicleHasBeenOwnedByPlayer(veh, true)
+            SetVehicleNeedsToBeHotwired(veh, false)
+            notify(src, 'success', ('Vehículo %s creado.'):format(model))
 
         elseif variantId == 'veh_fix' then
             TriggerClientEvent('oxe_admin:client:fixVehicle', src)
@@ -209,16 +255,28 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
     -- =======================
     elseif groupId == 'server' then
         if variantId == 'srv_time_cycle' then
-            debug('→ Cambiar hora (pendiente integrar con script de tiempo)')
+            if not ensureAdmin(src) then return end
+            local hoursCycle = { 9, 15, 22 }
+            local nextHour = hoursCycle[math.random(1, #hoursCycle)]
+            exports.time:setGameTime(nextHour, 0)
+            notify(src, 'success', ('Hora cambiada a %02d:00.'):format(nextHour))
 
         elseif variantId == 'srv_weather_cycle' then
-            debug('→ Cambiar clima (pendiente integrar con script de clima)')
+            if not ensureAdmin(src) then return end
+            local weathers = { 'EXTRASUNNY', 'CLEAR', 'CLOUDS', 'RAIN', 'THUNDER' }
+            local nextWeather = weathers[math.random(1, #weathers)]
+            exports.weather:setWeather(nextWeather)
+            notify(src, 'success', ('Clima cambiado a %s.'):format(nextWeather))
 
         elseif variantId == 'srv_freeze_time' then
-            debug('→ Congelar hora (pendiente implementar)')
+            if not ensureAdmin(src) then return end
+            local frozen = exports.time:toggleFreeze()
+            notify(src, 'success', frozen and 'Tiempo congelado.' or 'Tiempo reanudado.')
 
         elseif variantId == 'srv_freeze_weather' then
-            debug('→ Congelar clima (pendiente implementar)')
+            if not ensureAdmin(src) then return end
+            local frozen = exports.weather:toggleFreeze()
+            notify(src, 'success', frozen and 'Clima congelado.' or 'Clima dinámico reactivado.')
 
         elseif variantId == 'srv_announce' then
             local msg = tostring(payload.message or 'Anuncio admin')
@@ -235,7 +293,19 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
     -- =======================
     elseif groupId == 'props' then
         if variantId == 'props_spawn' then
-            debug('→ Spawnear prop (pendiente implementar)')
+            if not ensureAdmin(src) then return end
+            local model = payload.model or 'prop_beachball_02'
+            local hash = joaat(model)
+            if not IsModelInCdimage(hash) then
+                notify(src, 'error', ('Modelo de prop inválido: %s'):format(model))
+                return
+            end
+
+            local ped = GetPlayerPed(src)
+            local coords = GetEntityCoords(ped)
+            lib.requestModel(hash, 5000)
+            CreateObject(hash, coords.x, coords.y, coords.z, true, true, true)
+            notify(src, 'success', ('Prop %s creado.'):format(model))
 
         elseif variantId == 'props_edit' then
             TriggerClientEvent('oxe_admin:client:editPropMode', src)
