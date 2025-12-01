@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { isInGame } from "@/nui.ts";
 
 
@@ -254,16 +254,40 @@ const QUICK_GROUPS: QuickActionGroup[] = [
   },
 ];
 
+type ModalState =
+  | { type: "tp_coords"; group: QuickActionGroup; variant: QuickActionVariant }
+  | { type: "announce"; group: QuickActionGroup; variant: QuickActionVariant };
+
 export const QuickAdmin: React.FC<QuickAdminProps> = ({ onOpenTablet }) => {
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [coordsForm, setCoordsForm] = useState({ x: "", y: "", z: "" });
+  const [announceText, setAnnounceText] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
   const currentGroup = QUICK_GROUPS[selectedGroupIndex];
   const currentVariant =
     currentGroup?.variants[selectedVariantIndex] ?? currentGroup?.variants[0];
 
+  const modalTitle = useMemo(() => {
+    if (!modal) return "";
+    return modal.type === "tp_coords"
+      ? "Teletransportar a coordenadas"
+      : "Anuncio global";
+  }, [modal]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (modal) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setModal(null);
+          setFormError(null);
+        }
+        return;
+      }
+
       // ↑ / ↓ grupos
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -313,12 +337,26 @@ export const QuickAdmin: React.FC<QuickAdminProps> = ({ onOpenTablet }) => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentGroup, currentVariant]);
+  }, [currentGroup, currentVariant, modal]);
 
   const handleQuickAction = (
     group: QuickActionGroup,
     variant: QuickActionVariant
   ) => {
+    if (variant.id === "tp_coords") {
+      setCoordsForm({ x: "", y: "", z: "" });
+      setFormError(null);
+      setModal({ type: "tp_coords", group, variant });
+      return;
+    }
+
+    if (variant.id === "srv_announce") {
+      setAnnounceText("");
+      setFormError(null);
+      setModal({ type: "announce", group, variant });
+      return;
+    }
+
     // DEV: en navegador solo log
     if (!isInGame()) {
       console.log("[QuickAdmin DEV] Acción:", group.id, "→", variant.id);
@@ -338,6 +376,69 @@ export const QuickAdmin: React.FC<QuickAdminProps> = ({ onOpenTablet }) => {
     }).catch((err) => {
       console.error("[QuickAdmin] Error enviando quickAction NUI:", err);
     });
+  };
+
+  const submitActionWithPayload = (payload: unknown) => {
+    if (!modal) return;
+
+    if (!isInGame()) {
+      console.log(
+        "[QuickAdmin DEV] Acción con payload:",
+        modal.group.id,
+        "→",
+        modal.variant.id,
+        payload,
+      );
+      setModal(null);
+      return;
+    }
+
+    fetch(`https://oxe_administration/quickAction`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        groupId: modal.group.id,
+        actionId: modal.variant.id,
+        payload,
+      }),
+    })
+      .then(() => {
+        setModal(null);
+      })
+      .catch((err) => {
+        console.error("[QuickAdmin] Error enviando quickAction NUI:", err);
+      });
+  };
+
+  const handleSubmitCoords = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const x = parseFloat(coordsForm.x);
+    const y = parseFloat(coordsForm.y);
+    const z = parseFloat(coordsForm.z);
+
+    if ([x, y, z].some((value) => Number.isNaN(value))) {
+      setFormError("Introduce valores numéricos válidos para X, Y y Z.");
+      return;
+    }
+
+    submitActionWithPayload({ x, y, z });
+  };
+
+  const handleSubmitAnnounce = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const text = announceText.trim();
+    if (!text) {
+      setFormError("Escribe un mensaje para anunciar.");
+      return;
+    }
+
+    submitActionWithPayload({ text });
   };
 
   return (
@@ -501,6 +602,157 @@ export const QuickAdmin: React.FC<QuickAdminProps> = ({ onOpenTablet }) => {
           Navegar / Enter ejecutar
         </span>
       </div>
+
+      {modal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 px-4">
+          <div
+            className="w-full max-w-md rounded-2xl shadow-2xl border p-6 space-y-4"
+            style={{
+              backgroundColor: "var(--oxe-surface)",
+              borderColor: "var(--oxe-border)",
+              color: "var(--oxe-text)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p
+                  className="text-[12px] uppercase tracking-[0.18em]"
+                  style={{ color: "var(--oxe-text-muted)" }}
+                >
+                  Acción avanzada
+                </p>
+                <h2 className="text-xl font-semibold leading-tight">
+                  {modalTitle}
+                </h2>
+                <p className="text-sm" style={{ color: "var(--oxe-text-soft)" }}>
+                  Completa los datos y confirma para ejecutar la acción.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModal(null);
+                  setFormError(null);
+                }}
+                className="text-sm px-2 py-1 rounded border"
+                style={{
+                  borderColor: "var(--oxe-border)",
+                  color: "var(--oxe-text-soft)",
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {modal.type === "tp_coords" && (
+              <form className="space-y-3" onSubmit={handleSubmitCoords}>
+                <div className="grid grid-cols-3 gap-3">
+                  {(["x", "y", "z"] as const).map((axis) => (
+                    <label key={axis} className="text-sm space-y-1">
+                      <span className="block text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--oxe-text-muted)" }}>
+                        {axis.toUpperCase()}
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={coordsForm[axis]}
+                        onChange={(ev) =>
+                          setCoordsForm((prev) => ({ ...prev, [axis]: ev.target.value }))
+                        }
+                        className="w-full px-3 py-2 rounded border bg-transparent text-sm"
+                        style={{ borderColor: "var(--oxe-border)", color: "var(--oxe-text)" }}
+                        placeholder={axis === "z" ? "Ej: 35.0" : axis === "x" ? "Ej: -1200.5" : "Ej: 2550.2"}
+                        autoFocus={axis === "x"}
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                {formError && (
+                  <p className="text-sm" style={{ color: "var(--oxe-accent)" }}>
+                    {formError}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModal(null);
+                      setFormError(null);
+                    }}
+                    className="px-4 py-2 rounded border text-sm"
+                    style={{ borderColor: "var(--oxe-border)", color: "var(--oxe-text-soft)" }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded border text-sm font-semibold"
+                    style={{
+                      borderColor: "var(--oxe-accent)",
+                      backgroundColor: "var(--oxe-accent)",
+                      color: "#0B1120",
+                    }}
+                  >
+                    Teletransportar
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {modal.type === "announce" && (
+              <form className="space-y-3" onSubmit={handleSubmitAnnounce}>
+                <label className="text-sm space-y-1 w-full">
+                  <span className="block text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--oxe-text-muted)" }}>
+                    Mensaje a anunciar
+                  </span>
+                  <textarea
+                    value={announceText}
+                    onChange={(e) => setAnnounceText(e.target.value)}
+                    rows={4}
+                    className="w-full px-3 py-2 rounded border bg-transparent text-sm resize-none"
+                    style={{ borderColor: "var(--oxe-border)", color: "var(--oxe-text)" }}
+                    placeholder="Escribe el texto que verán todos los jugadores"
+                    autoFocus
+                  />
+                </label>
+
+                {formError && (
+                  <p className="text-sm" style={{ color: "var(--oxe-accent)" }}>
+                    {formError}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModal(null);
+                      setFormError(null);
+                    }}
+                    className="px-4 py-2 rounded border text-sm"
+                    style={{ borderColor: "var(--oxe-border)", color: "var(--oxe-text-soft)" }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded border text-sm font-semibold"
+                    style={{
+                      borderColor: "var(--oxe-accent)",
+                      backgroundColor: "var(--oxe-accent)",
+                      color: "#0B1120",
+                    }}
+                  >
+                    Enviar anuncio
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

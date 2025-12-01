@@ -45,6 +45,7 @@ RegisterKeyMapping('admin', 'Abrir panel de administración', 'keyboard', 'F10')
 RegisterNUICallback('quickAction', function(data, cb)
     local groupId = data.groupId
     local actionId = data.actionId
+    local payload = data.payload
 
     print(('[oxe_admin] quickAction %s -> %s'):format(groupId, actionId))
 
@@ -52,9 +53,9 @@ RegisterNUICallback('quickAction', function(data, cb)
     if groupId == 'self' then
         handleSelfAction(actionId)
     elseif groupId == 'teleport' then
-        handleTeleportAction(actionId)
+        handleTeleportAction(actionId, payload)
     elseif groupId == 'server' then
-        handleServerAction(actionId)
+        handleServerAction(actionId, payload)
     elseif groupId == 'vehicles' then
         handleVehicleAction(actionId)
     -- props / players los rellenamos luego
@@ -282,7 +283,7 @@ end
 ------------------------------------------------------------------
 -- Acciones: Teleport
 ------------------------------------------------------------------
-function handleTeleportAction(actionId)
+function handleTeleportAction(actionId, payload)
     local ped = PlayerPedId()
 
     if actionId == 'tp_waypoint' then
@@ -304,12 +305,20 @@ function handleTeleportAction(actionId)
         end
 
     elseif actionId == 'tp_coords' then
-        -- Más adelante: abrir un input NUI para pedir coords.
-        lib.notify({
-            title = 'Quick Admin',
-            description = 'TP a coords aún no implementado.',
-            type = 'inform'
-        })
+        if payload and type(payload.x) == 'number' and type(payload.y) == 'number' and type(payload.z) == 'number' then
+            SetEntityCoordsNoOffset(ped, payload.x + 0.0, payload.y + 0.0, payload.z + 0.0, false, false, false)
+            lib.notify({
+                title = 'Quick Admin',
+                description = ('Teletransportado a: %.2f, %.2f, %.2f'):format(payload.x, payload.y, payload.z),
+                type = 'success'
+            })
+        else
+            lib.notify({
+                title = 'Quick Admin',
+                description = 'Coordenadas inválidas recibidas desde NUI.',
+                type = 'error'
+            })
+        end
 
     elseif actionId == 'coords_copy_vec3' or actionId == 'coords_copy_vec4' then
         local coords = GetEntityCoords(ped)
@@ -334,10 +343,18 @@ end
 ------------------------------------------------------------------
 -- Acciones: Servidor (demo)
 ------------------------------------------------------------------
-function handleServerAction(actionId)
+function handleServerAction(actionId, payload)
     if actionId == 'srv_announce' then
-        -- Aquí podrías disparar un evento server-side para anuncio global
-        TriggerServerEvent('oxe_admin:server:announce')
+        local text = payload and payload.text
+        if type(text) == 'string' and text ~= '' then
+            TriggerServerEvent('oxe_admin:server:announce', text)
+        else
+            lib.notify({
+                title = 'Quick Admin',
+                description = 'El anuncio no puede ir vacío.',
+                type = 'error'
+            })
+        end
     elseif actionId == 'srv_cleanup' then
         TriggerServerEvent('oxe_admin:server:cleanup')
     else
