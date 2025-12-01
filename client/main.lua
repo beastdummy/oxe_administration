@@ -2,42 +2,66 @@
 
 local uiOpen = false
 
--- Comando para abrir / cerrar admin (Quick por defecto)
-RegisterCommand('admin', function()
-    uiOpen = not uiOpen
+local function openUi(mode)
+    uiOpen = true
 
-    SetNuiFocus(uiOpen, uiOpen)
+    SetNuiFocus(true, true)
     SendNUIMessage({
         action = 'setVisible',
-        data = uiOpen,
-        mode = 'quick' -- ya lo usas en tu App
+        data = true,
+        mode = mode or 'quick'
     })
+end
+
+local function closeUi()
+    uiOpen = false
+
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'setVisible',
+        data = false,
+    })
+end
+
+-- Comando para abrir / cerrar admin (Quick por defecto)
+RegisterCommand('admin', function()
+    if uiOpen then
+        closeUi()
+        return
+    end
+
+    TriggerServerEvent('oxe_admin:server:requestOpen')
 end, false)
 
 -- Por si quieres un keymapping
 RegisterKeyMapping('admin', 'Abrir panel de administración', 'keyboard', 'F10')
+
+RegisterNetEvent('oxe_admin:client:openQuick', function()
+    openUi('quick')
+end)
+
+RegisterNetEvent('oxe_admin:client:closeUi', function()
+    closeUi()
+end)
 
 ------------------------------------------------------------------
 -- NUI callback: acciones del Quick Admin
 ------------------------------------------------------------------
 RegisterNUICallback('quickAction', function(data, cb)
     local groupId = data.groupId
-    local actionId = data.actionId
+    local variantId = data.variantId
 
-    print(('[oxe_admin] quickAction %s -> %s'):format(groupId, actionId))
+    TriggerServerEvent('oxe_admin:server:quickAction', {
+        groupId = groupId,
+        variantId = variantId,
+        payload = data.payload,
+    })
 
-    -- Para ejemplo, implementamos algunas acciones reales:
-    if groupId == 'self' then
-        handleSelfAction(actionId)
-    elseif groupId == 'teleport' then
-        handleTeleportAction(actionId)
-    elseif groupId == 'server' then
-        handleServerAction(actionId)
-    elseif groupId == 'vehicles' then
-        handleVehicleAction(actionId)
-    -- props / players los rellenamos luego
-    end
+    if cb then cb({ ok = true }) end
+end)
 
+RegisterNUICallback('closeUi', function(_, cb)
+    closeUi()
     if cb then cb({ ok = true }) end
 end)
 
