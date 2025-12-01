@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { isInGame } from "@/nui.ts";
+import React, { useEffect, useState } from "react";
+import { isInGame, nuiFetch } from "@/nui.ts";
 
 
 export interface QuickAdminProps {
@@ -10,6 +10,7 @@ interface QuickActionVariant {
   id: string;
   label: string;
   description: string;
+  payload?: unknown;
 }
 
 interface QuickActionGroup {
@@ -364,15 +365,10 @@ export const QuickAdmin: React.FC<QuickAdminProps> = ({ onOpenTablet }) => {
     }
 
     // FiveM: mandamos NUI callback
-    fetch(`https://oxe_administration/quickAction`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8",
-      },
-      body: JSON.stringify({
-        groupId: group.id,
-        actionId: variant.id,
-      }),
+    nuiFetch("quickAction", {
+      groupId: group.id,
+      variantId: variant.id,
+      payload: variant.payload,
     }).catch((err) => {
       console.error("[QuickAdmin] Error enviando quickAction NUI:", err);
     });
