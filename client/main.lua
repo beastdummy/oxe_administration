@@ -1,6 +1,28 @@
 -- client/main.lua (o como lo tengas declarado en fxmanifest)
 
 local uiOpen = false
+local adminStates = {
+    godmode = false,
+    noclip = false,
+    invisible = false,
+    moveSpeedIndex = 1
+}
+
+local frozen = false
+
+local moveSpeedOptions = {
+    { label = 'Velocidad normal', multiplier = 1.0 },
+    { label = 'Velocidad +25%', multiplier = 1.25 },
+    { label = 'Velocidad +50%', multiplier = 1.5 }
+}
+
+local function notify(title, description, type)
+    lib.notify({
+        title = title,
+        description = description,
+        type = type or 'inform'
+    })
+end
 
 local function openUi(mode)
     uiOpen = true
@@ -95,6 +117,12 @@ function handleSelfAction(actionId)
     elseif actionId == 'self_noclip' then
         toggleNoclip()
 
+    elseif actionId == 'self_invisible' then
+        toggleInvisibility()
+
+    elseif actionId == 'self_move_speed' then
+        cycleMoveSpeed()
+
     else
         lib.notify({
             title = 'Quick Admin',
@@ -111,11 +139,9 @@ function toggleGodmode()
     SetEntityInvincible(ped, godmode)
     SetPlayerInvincible(PlayerId(), godmode)
 
-    lib.notify({
-        title = 'Quick Admin',
-        description = godmode and 'Godmode activado.' or 'Godmode desactivado.',
-        type = 'success'
-    })
+    adminStates.godmode = godmode
+
+    notify('Quick Admin', godmode and 'Godmode activado.' or 'Godmode desactivado.', 'success')
 end
 
 local noclip = false
@@ -123,14 +149,12 @@ function toggleNoclip()
     noclip = not noclip
     local ped = PlayerPedId()
     SetEntityCollision(ped, not noclip, not noclip)
-    FreezeEntityPosition(ped, noclip == false) -- truquito light
-    SetEntityInvincible(ped, noclip)
+    FreezeEntityPosition(ped, false) -- truquito light
+    SetEntityInvincible(ped, noclip or adminStates.godmode)
 
-    lib.notify({
-        title = 'Quick Admin',
-        description = noclip and 'Noclip activado (WASD, espacio, ctrl).' or 'Noclip desactivado.',
-        type = 'success'
-    })
+    adminStates.noclip = noclip
+
+    notify('Quick Admin', noclip and 'Noclip activado (WASD, espacio, ctrl).' or 'Noclip desactivado.', 'success')
 
     if noclip then
         CreateThread(function()
@@ -174,14 +198,115 @@ function toggleNoclip()
                 SetEntityCoordsNoOffset(ped, pos.x + offset.x, pos.y + offset.y, pos.z + offset.z, true, true, true)
                 Wait(0)
             end
+
+            local ped = PlayerPedId()
+            SetEntityCollision(ped, true, true)
+            FreezeEntityPosition(ped, false)
+            SetEntityInvincible(ped, adminStates.godmode)
         end)
     end
+end
+
+local function toggleInvisibility()
+    adminStates.invisible = not adminStates.invisible
+
+    local ped = PlayerPedId()
+    SetEntityVisible(ped, not adminStates.invisible, false)
+    SetEntityAlpha(ped, adminStates.invisible and 0 or 255, false)
+
+    notify('Quick Admin', adminStates.invisible and 'Invisibilidad activada.' or 'Invisibilidad desactivada.', 'success')
+end
+
+local function setMoveSpeed(multiplier, label)
+    SetRunSprintMultiplierForPlayer(PlayerId(), multiplier)
+    SetSwimMultiplierForPlayer(PlayerId(), multiplier)
+    notify('Quick Admin', ('Velocidad: %s'):format(label), 'success')
+end
+
+local function cycleMoveSpeed()
+    adminStates.moveSpeedIndex = adminStates.moveSpeedIndex + 1
+    if adminStates.moveSpeedIndex > #moveSpeedOptions then
+        adminStates.moveSpeedIndex = 1
+    end
+
+    local option = moveSpeedOptions[adminStates.moveSpeedIndex]
+    setMoveSpeed(option.multiplier, option.label)
+end
+
+local function resetStates()
+    local ped = PlayerPedId()
+    noclip = false
+    adminStates.noclip = false
+    adminStates.godmode = false
+    adminStates.invisible = false
+    adminStates.moveSpeedIndex = 1
+    frozen = false
+
+    SetEntityCollision(ped, true, true)
+    FreezeEntityPosition(ped, false)
+    SetEntityInvincible(ped, false)
+    SetPlayerInvincible(PlayerId(), false)
+    SetEntityVisible(ped, true, false)
+    SetEntityAlpha(ped, 255, false)
+    SetRunSprintMultiplierForPlayer(PlayerId(), moveSpeedOptions[1].multiplier)
+    SetSwimMultiplierForPlayer(PlayerId(), moveSpeedOptions[1].multiplier)
+end
+
+local function getCoordsForServerId(targetId)
+    local coords
+
+    local success = pcall(function()
+        if exports.ox_core and exports.ox_core.GetPlayerCoords then
+            coords = exports.ox_core:GetPlayerCoords(targetId)
+        end
+    end)
+
+    if success and coords then
+        if coords.xyz then
+            return coords.xyz
+        end
+
+        if coords.x then
+            return vector3(coords.x, coords.y, coords.z)
+        end
+    end
+
+    local player = GetPlayerFromServerId(targetId)
+    if player ~= -1 then
+        return GetEntityCoords(GetPlayerPed(player))
+    end
+
+    return nil
+end
+
+local function teleportSelf(coords)
+    local ped = PlayerPedId()
+    SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false)
+end
+
+local function teleportServerIdToCoords(targetId, coords)
+    local ok, result = pcall(function()
+        if exports.ox_core and exports.ox_core.SetPlayerCoords then
+            return exports.ox_core:SetPlayerCoords(targetId, coords)
+        end
+    end)
+
+    if ok and result ~= nil then
+        return result
+    end
+
+    if targetId == GetPlayerServerId(PlayerId()) then
+        teleportSelf(coords)
+        return true
+    end
+
+    return false
 end
 
 ------------------------------------------------------------------
 -- Acciones: Teleport
 ------------------------------------------------------------------
-function handleTeleportAction(actionId)
+function handleTeleportAction(actionId, payload)
     local ped = PlayerPedId()
 
     if actionId == 'tp_waypoint' then
@@ -203,12 +328,20 @@ function handleTeleportAction(actionId)
         end
 
     elseif actionId == 'tp_coords' then
-        -- Más adelante: abrir un input NUI para pedir coords.
-        lib.notify({
-            title = 'Quick Admin',
-            description = 'TP a coords aún no implementado.',
-            type = 'inform'
-        })
+        if payload and type(payload.x) == 'number' and type(payload.y) == 'number' and type(payload.z) == 'number' then
+            SetEntityCoordsNoOffset(ped, payload.x + 0.0, payload.y + 0.0, payload.z + 0.0, false, false, false)
+            lib.notify({
+                title = 'Quick Admin',
+                description = ('Teletransportado a: %.2f, %.2f, %.2f'):format(payload.x, payload.y, payload.z),
+                type = 'success'
+            })
+        else
+            lib.notify({
+                title = 'Quick Admin',
+                description = 'Coordenadas inválidas recibidas desde NUI.',
+                type = 'error'
+            })
+        end
 
     elseif actionId == 'coords_copy_vec3' or actionId == 'coords_copy_vec4' then
         local coords = GetEntityCoords(ped)
@@ -221,12 +354,11 @@ function handleTeleportAction(actionId)
             text = ("vector4(%.2f, %.2f, %.2f, %.2f)"):format(coords.x, coords.y, coords.z, heading)
         end
 
-        -- Por ahora solo mostramos, más adelante mandamos a NUI para copiar al portapapeles
-        lib.notify({
-            title = 'Quick Admin',
-            description = 'Coordenadas: ' .. text,
-            type = 'inform'
-        })
+        if lib and lib.setClipboard then
+            lib.setClipboard(text)
+        end
+
+        notify('Quick Admin', 'Coordenadas copiadas: ' .. text, 'inform')
         print('[oxe_admin] Coords copiadas: ' .. text)
     end
 end
@@ -234,10 +366,18 @@ end
 ------------------------------------------------------------------
 -- Acciones: Servidor (demo)
 ------------------------------------------------------------------
-function handleServerAction(actionId)
+function handleServerAction(actionId, payload)
     if actionId == 'srv_announce' then
-        -- Aquí podrías disparar un evento server-side para anuncio global
-        TriggerServerEvent('oxe_admin:server:announce')
+        local text = payload and payload.text
+        if type(text) == 'string' and text ~= '' then
+            TriggerServerEvent('oxe_admin:server:announce', text)
+        else
+            lib.notify({
+                title = 'Quick Admin',
+                description = 'El anuncio no puede ir vacío.',
+                type = 'error'
+            })
+        end
     elseif actionId == 'srv_cleanup' then
         TriggerServerEvent('oxe_admin:server:cleanup')
     else
@@ -279,6 +419,15 @@ function handleVehicleAction(actionId)
             description = 'Vehículo limpiado.',
             type = 'success'
         })
+    elseif actionId == 'veh_delete' then
+        DeleteEntity(veh)
+        notify('Quick Admin', 'Vehículo eliminado.', 'success')
+    elseif actionId == 'veh_fuel_max' then
+        SetVehicleFuelLevel(veh, 100.0)
+        notify('Quick Admin', 'Depósito rellenado al máximo.', 'success')
+    elseif actionId == 'veh_flip' then
+        SetVehicleOnGroundProperly(veh)
+        notify('Quick Admin', 'Vehículo volteado.', 'success')
     else
         lib.notify({
             title = 'Quick Admin',
@@ -287,3 +436,163 @@ function handleVehicleAction(actionId)
         })
     end
 end
+
+------------------------------------------------------------------
+-- Eventos compartidos con el servidor
+------------------------------------------------------------------
+RegisterNetEvent('oxe_admin:client:openQuick', function()
+    if not uiOpen then
+        ExecuteCommand('admin')
+        return
+    end
+
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        action = 'setVisible',
+        data = true,
+        mode = 'quick'
+    })
+end)
+
+RegisterNetEvent('oxe_admin:client:toggleNoclip', toggleNoclip)
+RegisterNetEvent('oxe_admin:client:toggleGodmode', toggleGodmode)
+RegisterNetEvent('oxe_admin:client:toggleInvisible', toggleInvisibility)
+RegisterNetEvent('oxe_admin:client:healSelf', function()
+    handleSelfAction('self_heal')
+end)
+RegisterNetEvent('oxe_admin:client:clearBlood', function()
+    handleSelfAction('self_clear_blood')
+end)
+RegisterNetEvent('oxe_admin:client:cycleMoveSpeed', cycleMoveSpeed)
+
+RegisterNetEvent('oxe_admin:client:tpToWaypoint', function()
+    handleTeleportAction('tp_waypoint')
+end)
+
+RegisterNetEvent('oxe_admin:client:tpToCoords', function(payload)
+    if type(payload) ~= 'table' then
+        notify('Quick Admin', 'Coordenadas inválidas.', 'error')
+        return
+    end
+
+    local coords = vector3(tonumber(payload.x or 0.0), tonumber(payload.y or 0.0), tonumber(payload.z or 0.0))
+    teleportSelf(coords)
+    notify('Quick Admin', ('Teletransportado a %.2f, %.2f, %.2f'):format(coords.x, coords.y, coords.z), 'success')
+end)
+
+RegisterNetEvent('oxe_admin:client:copyCoordsVec3', function()
+    handleTeleportAction('coords_copy_vec3')
+end)
+
+RegisterNetEvent('oxe_admin:client:copyCoordsVec4', function()
+    handleTeleportAction('coords_copy_vec4')
+end)
+
+RegisterNetEvent('oxe_admin:client:tpToPlayer', function(targetId)
+    targetId = tonumber(targetId)
+    if not targetId then
+        notify('Quick Admin', 'ID de jugador inválido para TP.', 'error')
+        return
+    end
+
+    local coords = getCoordsForServerId(targetId)
+    if not coords then
+        notify('Quick Admin', 'No se encontraron coordenadas del jugador.', 'error')
+        return
+    end
+
+    teleportSelf(coords + vector3(0.0, 0.0, 1.0))
+    notify('Quick Admin', ('Teletransportado hasta el jugador %d.'):format(targetId), 'success')
+end)
+
+RegisterNetEvent('oxe_admin:client:bringPlayer', function(targetId)
+    targetId = tonumber(targetId)
+    if not targetId then
+        notify('Quick Admin', 'ID de jugador inválido para Bring.', 'error')
+        return
+    end
+
+    local coords = GetEntityCoords(PlayerPedId()) + vector3(1.0, 0.0, 0.0)
+    if teleportServerIdToCoords(targetId, coords) then
+        notify('Quick Admin', ('Has traído al jugador %d.'):format(targetId), 'success')
+    else
+        notify('Quick Admin', 'No se pudo mover al jugador (export de ox_core ausente).', 'error')
+    end
+end)
+
+RegisterNetEvent('oxe_admin:client:tpBring', function(targetId)
+    TriggerEvent('oxe_admin:client:bringPlayer', targetId)
+end)
+
+RegisterNetEvent('oxe_admin:client:giveCoords', function(targetId)
+    targetId = tonumber(targetId)
+    local coords = targetId and getCoordsForServerId(targetId) or GetEntityCoords(PlayerPedId())
+    local heading = targetId and GetEntityHeading(PlayerPedId()) or GetEntityHeading(PlayerPedId())
+    coords = coords or GetEntityCoords(PlayerPedId())
+
+    local text = ('vector4(%.2f, %.2f, %.2f, %.2f)'):format(coords.x, coords.y, coords.z, heading)
+    if lib and lib.setClipboard then
+        lib.setClipboard(text)
+    end
+
+    notify('Quick Admin', 'Coordenadas copiadas al portapapeles.', 'inform')
+end)
+
+RegisterNetEvent('oxe_admin:client:toggleFreeze', function()
+    frozen = not frozen
+    local ped = PlayerPedId()
+    FreezeEntityPosition(ped, frozen)
+    notify('Quick Admin', frozen and 'Jugador congelado.' or 'Jugador desbloqueado.', 'success')
+end)
+
+RegisterNetEvent('oxe_admin:client:spectatePlayer', function(targetId)
+    notify('Quick Admin', ('Modo espectador a %s pendiente de implementar.'):format(targetId or '?'), 'inform')
+end)
+
+RegisterNetEvent('oxe_admin:client:fixVehicle', function()
+    handleVehicleAction('veh_fix')
+end)
+
+RegisterNetEvent('oxe_admin:client:cleanVehicle', function()
+    handleVehicleAction('veh_clean')
+end)
+
+RegisterNetEvent('oxe_admin:client:deleteVehicle', function()
+    handleVehicleAction('veh_delete')
+end)
+
+RegisterNetEvent('oxe_admin:client:fillFuel', function()
+    handleVehicleAction('veh_fuel_max')
+end)
+
+RegisterNetEvent('oxe_admin:client:flipVehicle', function()
+    handleVehicleAction('veh_flip')
+end)
+
+RegisterNetEvent('oxe_admin:client:editPropMode', function()
+    notify('Quick Admin', 'Modo edición de props pendiente de implementar.', 'inform')
+end)
+
+RegisterNetEvent('oxe_admin:client:deleteProp', function()
+    notify('Quick Admin', 'Eliminar props pendiente de implementar.', 'inform')
+end)
+
+RegisterNetEvent('oxe_admin:client:duplicateProp', function()
+    notify('Quick Admin', 'Duplicar props pendiente de implementar.', 'inform')
+end)
+
+AddEventHandler('onResourceStop', function(resName)
+    if resName ~= GetCurrentResourceName() then return end
+
+    if uiOpen then
+        uiOpen = false
+        SetNuiFocus(false, false)
+        SendNUIMessage({
+            action = 'setVisible',
+            data = false,
+            mode = 'quick'
+        })
+    end
+
+    resetStates()
+end)

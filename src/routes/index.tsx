@@ -59,6 +59,19 @@ function AdminRoot() {
         <QuickAdmin onOpenTablet={() => setMode('tablet')} />
       )}
 
+      {copiedText && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg border shadow-lg text-sm"
+          style={{
+            backgroundColor: 'var(--oxe-surface)',
+            borderColor: 'var(--oxe-border)',
+            color: 'var(--oxe-text)',
+          }}
+        >
+          Coordenadas copiadas: {copiedText}
+        </div>
+      )}
+
       {/* Ayuda abajo izquierda */}
     </div>
   )
