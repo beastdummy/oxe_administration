@@ -1,0 +1,110 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Variante dark para Tailwind v4 (por si la usas en otros sitios) */
+/* @custom-variant dark (&:is(.dark *));
+
+/* ========= NUI: fondo SIEMPRE transparente ========= */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: transparent !important;
+}
+
+/* Fuente global (sin tocar colores de fondo) */
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* ===================================================
+   PALETA OXE (por variables) 
+   Estas variables son las que usarán QuickAdmin y Tablet
+   =================================================== */
+
+/* Tema por defecto: “Clásico” */
+:root,
+.oxe-theme-classic {
+  /* Superficies / paneles: gris neutro, más claro que el neón */
+  --oxe-surface: #111115;           /* fondo principal de la tablet (gris carbón) */
+  --oxe-surface-elevated: #18181b;  /* tarjetas / cards un poco más claras */
+  --oxe-border: #27272f;            /* borde gris medio */
+
+  /* Sidebar: gris oscuro neutro (sin azul) */
+  --oxe-sidebar: #060607;
+  --oxe-sidebar-active: #27272f;
+
+  /* Acentos / estados: blanco/gris muy claro para que “brille” */
+  --oxe-accent: #f9fafb;                         /* casi blanco */
+  --oxe-accent-soft: rgba(249, 250, 251, 0.16);  /* halo suave */
+
+  /* Texto en modo clásico: blanco y grises neutros */
+  --oxe-text: #f9fafb;        /* texto principal */
+  --oxe-text-muted: #d4d4d8;  /* gris claro (zinc-300) */
+  --oxe-text-soft: #9ca3af;   /* gris medio para descripciones */
+}
+
+/* Tema alternativo: “Neón” */
+.oxe-theme-neon {
+  /* Fondo con tono azul-violeta muy oscuro */
+  --oxe-surface: #020617;            /* tipo slate-950 */
+  --oxe-surface-elevated: #02081b;   /* cards ligeramente más claras */
+  --oxe-border: #1e293b;             /* azul grisáceo (slate-800 aprox.) */
+
+  /* Sidebar más “profundo” pero sin perder contraste */
+  --oxe-sidebar: #020617;
+  --oxe-sidebar-active: #0b1120;
+
+  /* Acento neón: cian muy vivo */
+  --oxe-accent: #22e3ff;                 /* cian más eléctrico que antes */
+  --oxe-accent-soft: rgba(34, 227, 255, 0.25);  /* halo más marcado */
+
+  /* Texto */
+  --oxe-text: #f9fafb;              /* blanco principal */
+  --oxe-text-muted: #c4b5fd;        /* violeta claro “gamer” */
+  --oxe-text-soft: #64748b;         /* gris azulado para descripciones */
+}
+
+.oxe-theme-white {
+  /* Superficies claras */
+  --oxe-surface: #f3f4f6;           /* fondo principal (gris muy claro) */
+  --oxe-surface-elevated: #ffffff;  /* tarjetas / cards blancas */
+  --oxe-border: #e5e7eb;            /* borde gris suave */
+
+  /* Sidebar clara en escala de grises */
+  --oxe-sidebar: #f9fafb;          /* fondo sidebar */
+  --oxe-sidebar-active: #e5e7eb;   /* item activo ligeramente más oscuro */
+
+  /* Acentos: gris/azul discreto para no romper el estilo */
+  --oxe-accent: #2563eb;                         /* azul tipo tailwind “primary” */
+  --oxe-accent-soft: rgba(37, 99, 235, 0.12);   /* halo suave debajo de chips/badges */
+
+  /* Texto en tema blanco */
+  --oxe-text: #0f172a;        /* casi negro (slate-900) */
+  --oxe-text-muted: #4b5563;  /* gris medio */
+  --oxe-text-soft: #9ca3af;   /* gris claro para descripciones */
+}
+
+/* (Opcional) si quieres un tema extra, clónalo así:
+.oxe-theme-sunset { ... overrides ... }
+*/
+
+/* ===================================================
+   Utilidades globales suaves (sin tocar fondo global)
+   =================================================== */
+
+/* NO damos borde por defecto a todo, solo dejamos
+   que Tailwind maneje borders cuando tú lo pidas.
+   Si quieres algún ajuste global extra, mételo aquí.
+*/
