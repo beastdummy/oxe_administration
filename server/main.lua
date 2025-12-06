@@ -30,6 +30,20 @@ local function notify(src, type, description, title)
     })
 end
 
+local function ensureExport(resourceName, label)
+    local state = GetResourceState(resourceName)
+    if state ~= 'started' and state ~= 'starting' then
+        return nil, ('El recurso %s no está disponible (estado: %s).'):format(label or resourceName, state)
+    end
+
+    local exportRef = exports[resourceName]
+    if not exportRef then
+        return nil, ('No se encontró el export de %s.'):format(label or resourceName)
+    end
+
+    return exportRef
+end
+
 ---Comprueba si un jugador tiene permiso de admin.
 ---@param src number
 ---@return boolean
@@ -126,7 +140,13 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
 
         elseif variantId == 'self_clear_inventory' then
             if not ensureAdmin(src) then return end
-            exports.ox_inventory:ClearInventory(src)
+            local oxInventory, err = ensureExport('ox_inventory', 'ox_inventory')
+            if not oxInventory then
+                notify(src, 'error', err or 'El recurso ox_inventory no está disponible.')
+                return
+            end
+
+            oxInventory:ClearInventory(src)
             notify(src, 'success', 'Has vaciado tu inventario.')
 
         elseif variantId == 'self_admin_weapon' then
@@ -155,7 +175,13 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
 
         elseif variantId == 'players_open_inventory' then
             if not ensureAdmin(src) then return end
-            local opened = exports.ox_inventory:forceOpenInventory(src, 'player', targetId)
+            local oxInventory, err = ensureExport('ox_inventory', 'ox_inventory')
+            if not oxInventory then
+                notify(src, 'error', err or 'El recurso ox_inventory no está disponible.')
+                return
+            end
+
+            local opened = oxInventory:forceOpenInventory(src, 'player', targetId)
             if not opened then
                 notify(src, 'error', ('No se pudo abrir el inventario de %d.'):format(targetId))
             else
@@ -164,7 +190,13 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
 
         elseif variantId == 'players_clear_inventory' then
             if not ensureAdmin(src) then return end
-            exports.ox_inventory:ClearInventory(targetId)
+            local oxInventory, err = ensureExport('ox_inventory', 'ox_inventory')
+            if not oxInventory then
+                notify(src, 'error', err or 'El recurso ox_inventory no está disponible.')
+                return
+            end
+
+            oxInventory:ClearInventory(targetId)
             notify(src, 'success', ('Inventario de %d limpiado.'):format(targetId))
 
         elseif variantId == 'players_freeze' then
@@ -258,24 +290,48 @@ RegisterNetEvent('oxe_admin:server:quickAction', function(data)
             if not ensureAdmin(src) then return end
             local hoursCycle = { 9, 15, 22 }
             local nextHour = hoursCycle[math.random(1, #hoursCycle)]
-            exports.time:setGameTime(nextHour, 0)
+            local timeExport, err = ensureExport('time', 'time')
+            if not timeExport then
+                notify(src, 'error', err or 'El recurso time no está disponible.')
+                return
+            end
+
+            timeExport:setGameTime(nextHour, 0)
             notify(src, 'success', ('Hora cambiada a %02d:00.'):format(nextHour))
 
         elseif variantId == 'srv_weather_cycle' then
             if not ensureAdmin(src) then return end
             local weathers = { 'EXTRASUNNY', 'CLEAR', 'CLOUDS', 'RAIN', 'THUNDER' }
             local nextWeather = weathers[math.random(1, #weathers)]
-            exports.weather:setWeather(nextWeather)
+            local weatherExport, err = ensureExport('weather', 'weather')
+            if not weatherExport then
+                notify(src, 'error', err or 'El recurso weather no está disponible.')
+                return
+            end
+
+            weatherExport:setWeather(nextWeather)
             notify(src, 'success', ('Clima cambiado a %s.'):format(nextWeather))
 
         elseif variantId == 'srv_freeze_time' then
             if not ensureAdmin(src) then return end
-            local frozen = exports.time:toggleFreeze()
+            local timeExport, err = ensureExport('time', 'time')
+            if not timeExport then
+                notify(src, 'error', err or 'El recurso time no está disponible.')
+                return
+            end
+
+            local frozen = timeExport:toggleFreeze()
             notify(src, 'success', frozen and 'Tiempo congelado.' or 'Tiempo reanudado.')
 
         elseif variantId == 'srv_freeze_weather' then
             if not ensureAdmin(src) then return end
-            local frozen = exports.weather:toggleFreeze()
+            local weatherExport, err = ensureExport('weather', 'weather')
+            if not weatherExport then
+                notify(src, 'error', err or 'El recurso weather no está disponible.')
+                return
+            end
+
+            local frozen = weatherExport:toggleFreeze()
             notify(src, 'success', frozen and 'Clima congelado.' or 'Clima dinámico reactivado.')
 
         elseif variantId == 'srv_announce' then
