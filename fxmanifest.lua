@@ -9,9 +9,10 @@ version '1.0.0'
 
 ui_page 'ui/index.html'
 
+-- Incluimos todo el directorio NUI para evitar 404 de assets o iconos
 files {
     'ui/index.html',
-    'ui/assets/**/*'
+    'ui/**/*'
 }
 
 shared_scripts {
