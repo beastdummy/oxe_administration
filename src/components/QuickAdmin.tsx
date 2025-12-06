@@ -396,7 +396,7 @@ export const QuickAdmin: React.FC<QuickAdminProps> = ({ onOpenTablet }) => {
       },
       body: JSON.stringify({
         groupId: modal.group.id,
-        actionId: modal.variant.id,
+        variantId: modal.variant.id,
         payload,
       }),
     })
